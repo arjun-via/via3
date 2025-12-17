@@ -10,6 +10,11 @@ from starlette.websockets import WebSocketDisconnect
 from .controls import RunControls
 from .protocol import Event, StartSolveRequest
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    load_dotenv = None
+
 
 EmitFn = Callable[[Event], Awaitable[None]]
 
@@ -23,6 +28,9 @@ class DemoOrchestrator:
 
 
 def create_app(*, orchestrator: Any | None = None) -> FastAPI:
+    if load_dotenv is not None:
+        load_dotenv(override=True)
+
     app = FastAPI()
     active_orchestrator = orchestrator or DemoOrchestrator()
 
