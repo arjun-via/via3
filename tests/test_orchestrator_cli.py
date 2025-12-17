@@ -87,7 +87,18 @@ def test_cli_invokes_orchestrator(monkeypatch, tmp_path, capsys):
             return LoopState(issue_description=issue_description, repo_path=repo_path)
 
     monkeypatch.setattr("main.ALOOrchestrator", FakeOrchestrator)
-    monkeypatch.setattr("main.load_config", lambda path=None: {"models": {}, "logging": {}})
+    monkeypatch.setattr(
+        "main.load_config",
+        lambda path=None: {
+            "models": {
+                "context": {"id": "gemini-test"},
+                "repro": {"id": "gpt-test"},
+                "engineering": {"id": "gpt-test"},
+                "review": {"id": "gpt-test"},
+            },
+            "logging": {},
+        },
+    )
     monkeypatch.setattr("main.ToolRegistry", lambda workspace_root=None: None)
     monkeypatch.setenv("PYTHONWARNINGS", "ignore")
 

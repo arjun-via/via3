@@ -3,4 +3,7 @@ python-dotenv
 openai
 google-generativeai
 anthropic
+fastapi
+uvicorn
+httpx
 pytest
