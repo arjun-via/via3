@@ -1,157 +1,86 @@
-# Via2 - Autonomous Software Engineering Agent Systems
+# Via3 — IDE-First Agent Orchestrator
 
-This repository contains three distinct autonomous agent systems for solving software engineering tasks, particularly SWE-bench bug fixes.
+Via3 is the next iteration of the Via agent systems: a **production-shaped orchestrator** designed to solve software engineering tasks with **official-faithful validation** and a **human-in-the-loop** workflow (plan → diff → tests → approve).
 
-## Three Systems Overview
+This repo currently contains the Via2 codebase (ALO, Opus Orchestrator, Opus Meta-Orchestrator). The Via3 direction is specified in `PRD.md`.
 
-| System | Description | Models Used | Best For |
-|--------|-------------|-------------|----------|
-| **ALO** | Multi-model pipeline with specialized agents | Gemini, GPT, GLM, Kimi | Complex multi-step tasks |
-| **Opus Orchestrator** | Single-model iterative loop with Docker | Claude Opus 4.5 only | SWE-bench bug fixes |
-| **Dynamic** | Adaptive model selection with learning | Multiple models, dynamically selected | Cost-optimized execution |
+## Goals (from `PRD.md`)
 
----
+- **Evaluation rigor**: validation must match *official* SWE-bench behavior (e.g., function-level invocation when required).
+- **Execution-guided selection**: generate **N patch candidates** (3–7), run real tests, select the best result.
+- **Strong localization**: fast repo search (BM25/`rg`/stacktrace) + test-name → code mapping.
+- **Human control**: show plan/logs/diff/tests; never auto-apply without explicit approval; support cancel/pause/resume.
+- **Telemetry**: event-sourced logs + reproducible “artifact bundle” export (diff, logs, config, environment).
 
-## 1. ALO (Agentic Loops Orchestrator)
-
-Multi-model pipeline that coordinates four specialized agent loops:
+## Target architecture
 
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────────┐    ┌─────────────┐
-│  CONTEXT    │───▶│   REPRO     │───▶│  ENGINEERING    │───▶│   REVIEW    │
-│  (Gemini)   │    │   (GPT)     │    │    (GLM)        │    │   (Kimi)    │
-└─────────────┘    └─────────────┘    └─────────────────┘    └─────────────┘
+┌──────────────────────────┐      HTTP / WebSocket      ┌──────────────────────────┐
+│ IDE Extension / UI Client │  <──────────────────────>  │     Agent Service        │
+│ (VS Code-class UX)        │                            │ (orchestrator + APIs)    │
+└──────────────────────────┘                            └───────────┬──────────────┘
+                                                                     │
+                                                                     │
+                                              ┌──────────────────────┴──────────────────────┐
+                                              │                                             │
+                                              ▼                                             ▼
+                                   ┌──────────────────────┐                      ┌──────────────────────┐
+                                   │    Sandbox Runner     │                      │     Model Gateway     │
+                                   │ (local/Docker/remote) │                      │ (Anthropic/OpenAI/…) │
+                                   └──────────────────────┘                      └──────────────────────┘
 ```
 
-**Components:**
-- `alo/agentic_loops/context_loop/` - Analyzes full repo with massive context window
-- `alo/agentic_loops/repro_loop/` - Creates reproduction scripts (ReAct pattern)
-- `alo/agentic_loops/engineering_loop/` - Writes code fixes
-- `alo/agentic_loops/review_loop/` - Reviews fixes for security/correctness
+## Repo map (today)
 
-**Usage:**
-```bash
-python main.py --issue "Describe the bug" --repo /path/to/repo
-```
+- `alo/agentic_loops/`: core agent/orchestrator implementations (ALO + Opus family)
+- `benchmark/`: SWE-bench runners, evaluators, analysis scripts
+- `config/`: YAML configs for orchestrator variants
+- `frontend/`: web UI prototype for the Opus Meta-Orchestrator (real-time logs via WebSocket)
+- `docs/`: additional design notes
 
-**Config:** `config/config.yaml` and variants (`config_alo_*.yaml`)
-
----
-
-## 2. Opus Orchestrator
-
-Single-model system using Claude Opus 4.5 in an iterative THINK → ACT → OBSERVE loop with Docker execution.
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│                    AGENTIC LOOP CYCLE                          │
-│  ┌──────────┐     ┌──────────────┐     ┌──────────────────┐   │
-│  │  THINK   │────▶│     ACT      │────▶│    OBSERVE       │   │
-│  │  Claude  │     │  Execute ONE │     │  Get real output │   │
-│  │  Opus    │     │  bash command│     │  from Docker     │   │
-│  └──────────┘     └──────────────┘     └──────────────────┘   │
-│       ▲                                         │              │
-│       └─────── Iterate until SUBMIT ────────────┘              │
-└────────────────────────────────────────────────────────────────┘
-```
-
-**Key Techniques:**
-- One command per LLM response (prevents hallucination)
-- Docker-based execution in SWE-bench containers
-- Patch validation ensures source file changes (not just test files)
-
-**Components:**
-- `alo/agentic_loops/opus_orchestrator/agentic_loop.py` - Core loop
-- `alo/agentic_loops/opus_orchestrator/docker_executor.py` - Docker execution
-- `benchmark/run_opus_agentic.py` - SWE-bench runner
-
-**Usage:**
-```bash
-python benchmark/run_opus_agentic.py --num 25 --random --output results.jsonl
-```
-
-**Model:** `claude-opus-4-5-20251101` (Opus 4.5)
-
----
-
-## 3. Dynamic (Model Selection & Compounding)
-
-Adaptive system that learns optimal model selection based on task characteristics.
-
-**Components:**
-- `alo/agentic_loops/opus_orchestrator/model_selection_learner.py` - Learns model-task mappings
-- `alo/agentic_loops/opus_orchestrator/compounding_learner.py` - Knowledge compounding
-- `alo/agentic_loops/opus_orchestrator/meta_orchestrator.py` - Orchestrates with dynamic selection
-
-**Variants:**
-- BestInClass - Top models per role
-- Optimized - Cost/performance balanced
-- Open - Open-source models only
-
-**Config:** `config/config_opus_meta_*.yaml`
-
----
-
-## Quick Start
-
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Add API keys to `.env` (see `.env.example`):
-   ```
-   ANTHROPIC_API_KEY=...
-   OPENAI_API_KEY=...
-   GEMINI_API_KEY=...
-   ```
-
-3. Run the desired system:
-   ```bash
-   # ALO multi-model pipeline
-   python main.py --issue "Bug description" --repo /path/to/repo
-
-   # Opus Orchestrator single-model
-   python benchmark/run_opus_agentic.py --num 5 --output test.jsonl
-   ```
-
-## Directory Structure
-
-```
-Via2/
-├── alo/
-│   ├── agentic_loops/
-│   │   ├── core/           # Shared: state, tools, logging, costs
-│   │   ├── context_loop/   # ALO: Context agent
-│   │   ├── repro_loop/     # ALO: Reproduction agent
-│   │   ├── engineering_loop/ # ALO: Engineering agent
-│   │   ├── review_loop/    # ALO: Review agent
-│   │   ├── prompt_loop/    # ALO: Prompt agent
-│   │   └── opus_orchestrator/ # Opus Orchestrator + Dynamic
-│   ├── backend/clients/    # API clients (OpenAI, Gemini)
-│   └── config/             # Config loader
-├── benchmark/              # Benchmark runners and analysis
-├── config/                 # YAML configurations
-├── docs/                   # Documentation
-└── tests/                  # Unit tests
-```
-
-## Testing
+## Quick start (current code)
 
 ```bash
-# Run all tests
-pytest
-
-# Model connectivity smoke test
-PYTHONPATH=. python scripts/model_smoketest.py
+pip install -r requirements.txt
+cp .env.example .env  # add your API keys
 ```
 
-## Documentation
+Run the Opus Orchestrator SWE-bench runner:
 
-- `docs/OPUS_AGENTIC_OVERVIEW.md` - Opus Orchestrator details
-- `docs/OPUS_ORCHESTRATOR_VARIANTS.md` - Dynamic system variants
-- `CLAUDE.md` - Development instructions for Claude Code
+```bash
+python benchmark/run_opus_agentic.py --num 5 --output results.jsonl
+```
 
----
+Run the Meta-Orchestrator web UI:
 
-*Last Updated: 2025-11-28*
+```bash
+pip install -r frontend/requirements.txt
+python frontend/app.py
+```
+
+## Creating a new orchestrator (Via3-style)
+
+The Via3 orchestrator is intended to be an **Agent Service** with a stable API and pluggable internals (test adapters, sandbox backends, localization, model routing). Suggested development slices:
+
+1. **Define the contract**
+   - Request schema: issue/task + repo path + options (candidate count, budgets, adapters)
+   - Streaming events: `status`, `test_result`, `patch_generated`, `final` (see `PRD.md` for an example shape)
+
+2. **Implement validation-first execution**
+   - Add a `SandboxRunner` abstraction (local subprocess vs Docker vs remote)
+   - Add a `TestRunner` adapter layer (pytest, Django, …) with a single `run(target)` API
+
+3. **Add multi-patch selection**
+   - Generate N candidates under the same constraints/prompt
+   - Execute the same validation procedure for each candidate
+   - Select the best (pass rate, then cost/time, then patch size as a tie-breaker)
+
+4. **Add localization as a first-class module**
+   - `find_relevant_files(issue_text, error_text) -> ranked files`
+   - `map_test_to_code(test_identifier) -> likely source locations`
+
+5. **Make it reviewable**
+   - Emit diffs without applying
+   - Support apply/rollback semantics and artifact bundle export
+
+If you want this README to become the root `README.md`, we can move the existing Via2 overview into a `docs/` file and keep the top-level focused on Via3.
